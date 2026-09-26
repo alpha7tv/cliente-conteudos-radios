@@ -72,8 +72,13 @@ jobs:
             $codigo = $LASTEXITCODE
             if ($codigo -ne 0) {
               # Mostra o fim do log como anotacao de erro (aparece no resumo da execucao)
-              $fim = (Get-Content "$env:RUNNER_TEMP\craft.log" -Tail 60) -join '%0A'
-              Write-Output "::error title=Erro no Craft (craft $args)::$fim"
+              $linhas = Get-Content "$env:RUNNER_TEMP\craft.log" -Tail 120
+              $bloco = ""; $n = 0
+              foreach ($l in $linhas) {
+                if (($bloco.Length + $l.Length) -gt 3000) { $n++; Write-Output "::error title=Erro no Craft parte $n::$bloco"; $bloco = "" }
+                $bloco += ($l -replace '%','%25') + '%0A'
+              }
+              $n++; Write-Output "::error title=Erro no Craft parte $n::$bloco"
               exit $codigo
             }
           }
@@ -111,8 +116,13 @@ jobs:
             $codigo = $LASTEXITCODE
             if ($codigo -ne 0) {
               # Mostra o fim do log como anotacao de erro (aparece no resumo da execucao)
-              $fim = (Get-Content "$env:RUNNER_TEMP\craft.log" -Tail 60) -join '%0A'
-              Write-Output "::error title=Erro no Craft (craft $args)::$fim"
+              $linhas = Get-Content "$env:RUNNER_TEMP\craft.log" -Tail 120
+              $bloco = ""; $n = 0
+              foreach ($l in $linhas) {
+                if (($bloco.Length + $l.Length) -gt 3000) { $n++; Write-Output "::error title=Erro no Craft parte $n::$bloco"; $bloco = "" }
+                $bloco += ($l -replace '%','%25') + '%0A'
+              }
+              $n++; Write-Output "::error title=Erro no Craft parte $n::$bloco"
               exit $codigo
             }
           }
@@ -130,8 +140,13 @@ jobs:
             $codigo = $LASTEXITCODE
             if ($codigo -ne 0) {
               # Mostra o fim do log como anotacao de erro (aparece no resumo da execucao)
-              $fim = (Get-Content "$env:RUNNER_TEMP\craft.log" -Tail 60) -join '%0A'
-              Write-Output "::error title=Erro no Craft (craft $args)::$fim"
+              $linhas = Get-Content "$env:RUNNER_TEMP\craft.log" -Tail 120
+              $bloco = ""; $n = 0
+              foreach ($l in $linhas) {
+                if (($bloco.Length + $l.Length) -gt 3000) { $n++; Write-Output "::error title=Erro no Craft parte $n::$bloco"; $bloco = "" }
+                $bloco += ($l -replace '%','%25') + '%0A'
+              }
+              $n++; Write-Output "::error title=Erro no Craft parte $n::$bloco"
               exit $codigo
             }
           }
