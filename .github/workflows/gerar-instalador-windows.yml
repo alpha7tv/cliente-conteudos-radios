@@ -68,8 +68,14 @@ jobs:
             & cmd /C "git clone -q --depth=1 https://invent.kde.org/packaging/craftmaster.git $env:CRAFT_MASTER_LOCATION 2>&1"
           }
           function craft() {
-            python "$env:CRAFT_MASTER_LOCATION\CraftMaster.py" --config "$env:CRAFT_MASTER_CONFIG" --target $env:CRAFT_TARGET -c $args
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            python "$env:CRAFT_MASTER_LOCATION\CraftMaster.py" --config "$env:CRAFT_MASTER_CONFIG" --target $env:CRAFT_TARGET -c $args 2>&1 | Tee-Object -FilePath "$env:RUNNER_TEMP\craft.log" -Append
+            $codigo = $LASTEXITCODE
+            if ($codigo -ne 0) {
+              # Mostra o fim do log como anotacao de erro (aparece no resumo da execucao)
+              $fim = (Get-Content "$env:RUNNER_TEMP\craft.log" -Tail 60) -join '%0A'
+              Write-Output "::error title=Erro no Craft (craft $args)::$fim"
+              exit $codigo
+            }
           }
           # Mesmas receitas que a versao oficial usa
           $kde = (Select-String -Path $env:CRAFT_MASTER_CONFIG -Pattern '^\s*craft/craft-blueprints-kde.revision\s*=\s*(.+)$').Matches[0].Groups[1].Value.Trim()
@@ -101,8 +107,14 @@ jobs:
         shell: pwsh
         run: |
           function craft() {
-            python "$env:CRAFT_MASTER_LOCATION\CraftMaster.py" --config "$env:CRAFT_MASTER_CONFIG" --target $env:CRAFT_TARGET -c $args
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            python "$env:CRAFT_MASTER_LOCATION\CraftMaster.py" --config "$env:CRAFT_MASTER_CONFIG" --target $env:CRAFT_TARGET -c $args 2>&1 | Tee-Object -FilePath "$env:RUNNER_TEMP\craft.log" -Append
+            $codigo = $LASTEXITCODE
+            if ($codigo -ne 0) {
+              # Mostra o fim do log como anotacao de erro (aparece no resumo da execucao)
+              $fim = (Get-Content "$env:RUNNER_TEMP\craft.log" -Tail 60) -join '%0A'
+              Write-Output "::error title=Erro no Craft (craft $args)::$fim"
+              exit $codigo
+            }
           }
           craft --src-dir "${{ github.workspace }}\src" nextcloud-client
 
@@ -114,8 +126,14 @@ jobs:
         shell: pwsh
         run: |
           function craft() {
-            python "$env:CRAFT_MASTER_LOCATION\CraftMaster.py" --config "$env:CRAFT_MASTER_CONFIG" --target $env:CRAFT_TARGET -c $args
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            python "$env:CRAFT_MASTER_LOCATION\CraftMaster.py" --config "$env:CRAFT_MASTER_CONFIG" --target $env:CRAFT_TARGET -c $args 2>&1 | Tee-Object -FilePath "$env:RUNNER_TEMP\craft.log" -Append
+            $codigo = $LASTEXITCODE
+            if ($codigo -ne 0) {
+              # Mostra o fim do log como anotacao de erro (aparece no resumo da execucao)
+              $fim = (Get-Content "$env:RUNNER_TEMP\craft.log" -Tail 60) -join '%0A'
+              Write-Output "::error title=Erro no Craft (craft $args)::$fim"
+              exit $codigo
+            }
           }
           craft --src-dir "${{ github.workspace }}\src" --package nextcloud-client
           New-Item -ItemType Directory -Force saida | Out-Null
