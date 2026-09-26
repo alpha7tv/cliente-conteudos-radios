@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from aplicar_marca import MARCA  # noqa: E402
 
 NOVO_BLOCO = '''        # --- marca {nome} ---
+        from pathlib import Path
         self.defines["appname"] = "{exe}"
         self.defines["company"] = "{empresa}"
         self.defines["productname"] = "{nome}"
@@ -54,8 +55,8 @@ def main() -> None:
         t, n = re.subn(padrao, lambda _: bloco, t, flags=re.MULTILINE)
         if n != 1:
             sys.exit(f"ERRO: formato inesperado em {arq}; a receita do Nextcloud mudou.")
-        if "from pathlib import Path" not in t:
-            t = "from pathlib import Path\n" + t
+        if not re.search(r"^import os\b", t, flags=re.M):
+            t = re.sub(r"^(import info\s*)$", r"import os\n\1", t, count=1, flags=re.M)
         arq.write_text(t, encoding="utf-8")
         print(f"  receita ajustada: {arq}")
 
