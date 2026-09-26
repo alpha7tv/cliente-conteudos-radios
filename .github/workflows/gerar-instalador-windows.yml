@@ -1,0 +1,154 @@
+# Gera o instalador Windows do cliente "Conteudos para Radios".
+#
+# Como usar: no GitHub, abra a aba "Actions" > "Gerar instalador Windows" >
+# "Run workflow". Ao terminar (a primeira vez leva de 1h30 a 3h, as seguintes
+# ficam bem mais rapidas por causa do cache), o instalador aparece em
+# "Artifacts" no final da pagina da execucao.
+
+name: Gerar instalador Windows
+
+on:
+  workflow_dispatch:
+    inputs:
+      versao_nextcloud:
+        description: "Versao do cliente Nextcloud usada como base (tag do github.com/nextcloud/desktop)"
+        required: true
+        default: "v34.0.4"
+
+env:
+  NC_TAG: ${{ github.event.inputs.versao_nextcloud || 'v34.0.4' }}
+  CRAFT_TARGET: windows-msvc2022_64-cl
+  CRAFT_MASTER_LOCATION: ${{ github.workspace }}\CraftMaster
+  # O Craft cria as pastas de trabalho ao lado deste arquivo, por isso ele fica na raiz
+  CRAFT_MASTER_CONFIG: ${{ github.workspace }}\craftmaster.ini
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  windows:
+    name: Instalador Windows
+    runs-on: windows-2022
+    timeout-minutes: 360
+    env:
+      TEM_CERTIFICADO: ${{ secrets.CERT_PFX_BASE64 != '' }}
+    steps:
+      - name: Baixar o kit de marca
+        uses: actions/checkout@v4
+        with:
+          path: kit
+
+      - name: Baixar o codigo oficial do cliente Nextcloud (${{ env.NC_TAG }})
+        shell: pwsh
+        run: git clone --depth 1 --branch "$env:NC_TAG" https://github.com/nextcloud/desktop.git src
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Aplicar a marca
+        shell: pwsh
+        run: |
+          python kit\ferramentas\aplicar_marca.py src
+          Copy-Item src\craftmaster.ini craftmaster.ini
+
+      - name: Restaurar cache das dependencias
+        id: cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ${{ env.CRAFT_MASTER_LOCATION }}
+            ${{ github.workspace }}\craft-clone
+            ${{ github.workspace }}\${{ env.CRAFT_TARGET }}
+          key: craft-${{ env.CRAFT_TARGET }}-${{ env.NC_TAG }}-${{ hashFiles('craftmaster.ini') }}
+
+      - name: Instalar Craft e dependencias (Qt, OpenSSL etc.)
+        if: steps.cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          if (!(Test-Path "$env:CRAFT_MASTER_LOCATION")) {
+            & cmd /C "git clone -q --depth=1 https://invent.kde.org/packaging/craftmaster.git $env:CRAFT_MASTER_LOCATION 2>&1"
+          }
+          function craft() {
+            python "$env:CRAFT_MASTER_LOCATION\CraftMaster.py" --config "$env:CRAFT_MASTER_CONFIG" --target $env:CRAFT_TARGET -c $args
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+          # Mesmas receitas que a versao oficial usa
+          $kde = (Select-String -Path $env:CRAFT_MASTER_CONFIG -Pattern '^\s*craft/craft-blueprints-kde.revision\s*=\s*(.+)$').Matches[0].Groups[1].Value.Trim()
+          $nc  = (Select-String -Path $env:CRAFT_MASTER_CONFIG -Pattern '^\s*craft/craft-blueprints-nextcloud.revision\s*=\s*(.+)$').Matches[0].Groups[1].Value.Trim()
+          craft --add-blueprint-repository "https://github.com/nextcloud/craft-blueprints-kde.git|$kde|"
+          craft --add-blueprint-repository "https://github.com/nextcloud/craft-blueprints-nextcloud.git|$nc|"
+          craft craft
+          craft --install-deps nextcloud-client
+
+      - name: Salvar cache das dependencias
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ${{ env.CRAFT_MASTER_LOCATION }}
+            ${{ github.workspace }}\craft-clone
+            ${{ github.workspace }}\${{ env.CRAFT_TARGET }}
+          key: ${{ steps.cache.outputs.cache-primary-key }}
+
+      - name: Instalar Inkscape (gera os icones a partir do SVG)
+        shell: pwsh
+        run: choco install inkscape -y --no-progress
+
+      - name: Configurar PATH
+        shell: pwsh
+        run: echo "${{ github.workspace }}\${{ env.CRAFT_TARGET }}\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Compilar o cliente com a marca
+        shell: pwsh
+        run: |
+          function craft() {
+            python "$env:CRAFT_MASTER_LOCATION\CraftMaster.py" --config "$env:CRAFT_MASTER_CONFIG" --target $env:CRAFT_TARGET -c $args
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+          craft --src-dir "${{ github.workspace }}\src" nextcloud-client
+
+      - name: Ajustar nome, icone e atalho do instalador
+        shell: pwsh
+        run: python kit\ferramentas\ajustar_instalador_craft.py "${{ github.workspace }}\${{ env.CRAFT_TARGET }}\etc"
+
+      - name: Gerar o instalador (.exe)
+        shell: pwsh
+        run: |
+          function craft() {
+            python "$env:CRAFT_MASTER_LOCATION\CraftMaster.py" --config "$env:CRAFT_MASTER_CONFIG" --target $env:CRAFT_TARGET -c $args
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+          craft --src-dir "${{ github.workspace }}\src" --package nextcloud-client
+          New-Item -ItemType Directory -Force saida | Out-Null
+          Get-ChildItem "${{ github.workspace }}\${{ env.CRAFT_TARGET }}\tmp" -Filter *.exe -Recurse |
+            Where-Object { $_.Name -notmatch '-dbg' } |
+            ForEach-Object { Copy-Item $_.FullName "saida\ConteudosParaRadios-Setup-$env:NC_TAG.exe" }
+          if (!(Get-ChildItem saida -Filter *.exe)) { Write-Error "Instalador nao foi gerado"; exit 1 }
+          Get-ChildItem saida
+
+      # Assinatura digital (opcional, mas recomendada: sem ela o Windows
+      # mostra "Editor desconhecido" e o SmartScreen pode bloquear).
+      # Cadastre em Settings > Secrets and variables > Actions:
+      #   CERT_PFX_BASE64  = o certificado .pfx convertido em base64
+      #   CERT_SENHA       = a senha do .pfx
+      - name: Assinar o instalador
+        if: env.TEM_CERTIFICADO == 'true'
+        env:
+          CERT_PFX_BASE64: ${{ secrets.CERT_PFX_BASE64 }}
+          CERT_SENHA: ${{ secrets.CERT_SENHA }}
+        shell: pwsh
+        run: |
+          [IO.File]::WriteAllBytes("$env:RUNNER_TEMP\cert.pfx", [Convert]::FromBase64String($env:CERT_PFX_BASE64))
+          $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Recurse -Filter signtool.exe |
+            Where-Object { $_.FullName -match 'x64' } | Select-Object -Last 1
+          Get-ChildItem saida -Filter *.exe | ForEach-Object {
+            & $signtool.FullName sign /f "$env:RUNNER_TEMP\cert.pfx" /p "$env:CERT_SENHA" /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 $_.FullName
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+          Remove-Item "$env:RUNNER_TEMP\cert.pfx"
+
+      - name: Disponibilizar o instalador para download
+        uses: actions/upload-artifact@v4
+        with:
+          name: instalador-conteudos-para-radios-${{ env.NC_TAG }}
+          path: saida\*.exe
+          if-no-files-found: error
