@@ -97,8 +97,9 @@ def ajustar_cmake(raiz: Path) -> None:
     t = set_valor(t, "APPLICATION_VENDOR", m["empresa"])
 
     # Sem atualizacao automatica pelo servidor do Nextcloud: ela baixaria o
-    # cliente com a marca Nextcloud por cima do seu.
-    t = set_valor(t, "APPLICATION_UPDATE_URL", "")
+    # cliente com a marca Nextcloud por cima do seu. O endereco nao pode ficar
+    # vazio (o codigo nao compila), mas com BUILD_UPDATER OFF ele nunca e usado.
+    t = set_valor(t, "APPLICATION_UPDATE_URL", m["servidor"] + "/")
     t = set_opcao(t, "BUILD_UPDATER", "OFF")
 
     # Servidor pre-configurado
